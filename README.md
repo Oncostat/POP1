@@ -2,6 +2,4 @@
 
 These codes are the online material for the article:
 
-Proportional odds assumption for modeling longitudinal ordinal multiple toxicity outcomes in dose finding studies of targeted agents: a pooled analysis of 53 studies
-by Damien Drubay, Laurence Collette, and Xavier Paoletti
-(submitted to Biometrical journal)
+Damien Drubay, Laurence Collette, and Xavier Paoletti. Proportional odds assumption for modeling longitudinal ordinal multiple toxicity outcomes in dose finding studies of targeted agents: a pooled analysis of 53 studies. (submitted to Biometrical journal)
