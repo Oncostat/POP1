@@ -1,0 +1,57 @@
+stdInitBeta<-function(initBetaFx){
+	if(length(grep("|",names(initBetaFx),fixed=T))>1){
+			tmp<-initBetaFx[grep("|",names(initBetaFx),fixed=T)]*-1
+			initBetaFx[grep("|",names(initBetaFx),fixed=T)]<-c(tmp[1],diff(tmp))
+	}
+	if(length(grep("doseStd",names(initBetaFx)))>1){
+			tmp<-initBetaFx[grep("doseStd",names(initBetaFx))]
+			initBetaFx[grep("doseStd",names(initBetaFx))]<-c(tmp[1],diff(tmp))
+	}
+	if(length(grep("cycno",names(initBetaFx)))>1){
+			tmp<-initBetaFx[grep("cycno",names(initBetaFx))]
+			initBetaFx[grep("cycno",names(initBetaFx))]<-c(tmp[1],diff(tmp))
+	}
+	return(initBetaFx)
+}
+
+createStanData<-function(Y,X,T,rdm,P){
+	if(is.null(ncol(Y))){
+		return(list(
+			N=length(Y),
+			J=1,
+			P=P,
+			X=X,
+			Y=matrix(Y,ncol=1),
+			T=T,
+			nRdmLabs=max(rdm),
+			rdmLabs=rdm
+		))
+	}else{
+		return(list(
+			N=nrow(Y),
+			J=ncol(Y),
+			P=P,
+			X=X,
+			Y=Y,
+			T=T,
+			nRdmLabs=max(rdm),
+			rdmLabs=rdm
+		))
+	}
+}
+
+
+getInits<-function(stanObj){
+	return(list(betaFx=summary(stanObj)$summary[grep("betaFx",rownames(summary(stanObj)$summary)),colnames(summary(stanObj)$summary)=="mean"],
+		z=summary(stanObj)$summary[grep("z",rownames(summary(stanObj)$summary)),colnames(summary(stanObj)$summary)=="mean"],
+		r1_global=summary(stanObj)$summary[grep("r1_global",rownames(summary(stanObj)$summary)),colnames(summary(stanObj)$summary)=="mean"],
+		r2_global=summary(stanObj)$summary[grep("r2_global",rownames(summary(stanObj)$summary)),colnames(summary(stanObj)$summary)=="mean"],
+		r1_local=summary(stanObj)$summary[grep("r1_local",rownames(summary(stanObj)$summary)),colnames(summary(stanObj)$summary)=="mean"],
+		r2_local=summary(stanObj)$summary[grep("r2_local",rownames(summary(stanObj)$summary)),colnames(summary(stanObj)$summary)=="mean"],
+		tau=summary(stanObj)$summary[grep("tau",rownames(summary(stanObj)$summary)),colnames(summary(stanObj)$summary)=="mean"],
+		lambda=summary(stanObj)$summary[grep("lambda",rownames(summary(stanObj)$summary)),colnames(summary(stanObj)$summary)=="mean"],
+		sigma_rdmInt=summary(stanObj)$summary[grep("sigma_rdmInt",rownames(summary(stanObj)$summary)),colnames(summary(stanObj)$summary)=="mean"]
+		)
+	)
+}
+

@@ -1,0 +1,231 @@
+---
+title: "Results"
+output: pdf_document
+---
+
+
+```{r}
+#load your data here
+
+
+library(knitr)
+library(xtable)
+library(venn)
+library(gridExtra)
+library(ggplot2)
+prezRez<-function(mat){
+	apply(mat,1,function(s){
+		paste0(ifelse(s[4]==0,"\\textbf{",""),
+			sprintf("%0.2f",s[1])," [",sprintf("%0.2f",s[2]),"; ",sprintf("%0.2f",s[3]),"]",
+			ifelse(s[4]==0,"}","")
+			)
+	})
+}
+```
+
+# Proportion of each type of toxicity (in column) co-occurring with an other type of toxicity (in
+row) 
+
+```{r}
+#insert here the names of the columns of the 5 types of toxicity
+nams<-c("gradeC","gradeD","gradeH","gradeG","gradeO")
+tmp<-matrix("",5,5)
+for(i in 1:5){
+	for(j in 1:5){
+		tmp[i,j]<-ifelse(i==j,"-",sprintf("%0.2f",sum(data[,nams[i]]>0 & data[,nams[j]]>0)/sum(data[,nams[j]]>0)))
+	}
+}
+rownames(tmp)<-colnames(tmp)<-c("Cutaneous","Digestive","General disorder","Hematologic","Others")
+kable(tmp,format="latex",align=c("l","r","r","r","r","r"))
+```
+
+# Number of toxicities by type and grade
+
+```{r}
+tmp<-matrix(NA,4,5)
+for(i in 1:5){
+	counts<-as.numeric(table(data[,nams[i]])[-1])
+	tmp[,i]<-c(counts,sum(counts))
+}
+tmp<-cbind(c(1,2,"$\\geq$ 3","Total"),tmp,apply(tmp,1,sum))
+for(i in 2:ncol(tmp)) tmp[,i]<-sapply(tmp[,i],function(vec) if(nchar(vec)<=3){return(vec)}else{return(paste0(substr(vec,1,nchar(vec)-3),",",substr(vec,nchar(vec)-2,nchar(vec))))})
+colnames(tmp)<-c("Grade","Cutaneous","Digestive","General disorder","Hematologic","Others","Total")
+print(xtable(tmp,align=c("l","l","r","r","r","r","r","r")),include.rownames=F,sanitize.text.function=force)
+```
+
+# Co-occurence of the toxicity (all grades) for all reported cycles.
+
+```{r}
+x<-list(Cutaneous=which(data[,nams[1]]>0),
+	G=which(data[,nams[2]]>0),
+	Digestive=which(data[,nams[3]]>0),
+	Hematologic=which(data[,nams[4]]>0),
+	Others=which(data[,nams[5]]>0)
+	)
+names(x)<-c(paste0("Cutaneous\n(n=",sum(data[,nams[1]]>0),")"),
+	paste0("General disorders (n=",sum(data[,nams[2]]>0),")"),
+	paste0("Digestive\n(n=",sum(data[,nams[3]]>0),")"),
+	paste0("Hematologic\n(n=",sum(data[,nams[4]]>0),")"),
+	paste0("Others\n(n=",sum(data[,nams[5]]>0),")"))
+venn(x,zcol = c("red", "palegreen", "blue","yellow","purple","orange","cyan"))
+
+```
+
+# Models fit
+
+```{r}
+load("results/CRModel.RData")
+load("results/POModel.RData")
+```
+
+## Continuation ratio model
+
+### Parameter estimates
+
+```{r}
+b0<-summary(fit0)$summary[grep("betaFx",rownames(summary(fit0)$summary)),colnames(summary(fit0)$summary)%in%c("mean","2.5%","97.5%")]
+b0<-cbind(b0,I(b0[,2]<=0 & b0[,3]>=0))
+rez<-cbind(sort(apply(expand.grid(c("Cutaneous","Digestive","General","Hemato","Other"),c("a1","a2","a3","Dose1","Dose2","Dose3","Time1","Time2","Time3"),stringsAsFactors=F),1,function(x) paste(x,collapse="_"))),prezRez(b0),b0[,4])
+rez[,3]<-c("*","")[1*I(as.numeric(b0[,2])<=0 & as.numeric(b0[,3])>=0)+1]
+colnames(rez)<-c("parameter","value","signif")
+rez2<-as.data.frame(rez[grep("Cutaneous",rez[,1]),-ncol(rez)],stringsAsFactors=F)
+colnames(rez2)<-c("parameter","Cutaneous")
+for(i in c("Digestive","General","Hemato","Other")){
+	rez2<-within(rez2,assign(i,rez[grep(i,rez[,1]),2]))
+}
+rez2$parameter<-c("Intercept$_{\\textnormal{Grade}\\geq 1}$","Intercept$_{\\textnormal{Grade}\\geq 2}$","Intercept$_{\\textnormal{Grade}\\geq 3}$",
+	"Dose$_{\\textnormal{Grade}\\geq 1}$","Dose$_{\\textnormal{Grade}\\geq 2}$","Dose$_{\\textnormal{Grade}\\geq 3}$",
+	"Cycle$_{\\textnormal{Grade}\\geq 1}$","Cycle$_{\\textnormal{Grade}\\geq 2}$","Cycle$_{\\textnormal{Grade}\\geq 3}$")
+print(xtable(rez2,align=c("l","l","r","r","r","r","r")),include.rownames=F,sanitize.text.function=force)
+
+```
+
+### Random effect correlation matrix
+
+```{r}
+tmp<-summary(fit0)$summary[grep("Omega",rownames(summary(fit0)$summary)),]
+tmp<-paste0(sprintf("%.2f",tmp[,1])," [",sprintf("%.2f",tmp[,4]),"; ",sprintf("%.2f",tmp[,8]),"]")
+b<-matrix(tmp,5,5)
+rownames(b)<-colnames(b)<-c("Cutaneous","Digestive","General disorder","Hematologic","Others")
+diag(b)<-1
+b[upper.tri(b)]<-""
+kable(b,format="latex",align=c("l","r","r","r","r","r"))
+
+```
+
+### Posterior predictive distribution
+
+Observed (empty circle) vs expected probability of each type of toxicity at each cycle according to the CR model. The median expected probability (filled circles) and the 95% prediction interval were obtained from 1,000 simulations from the posterior predictive distribution of the model.
+
+```{r}
+tmp<-predDist(fitCR)
+files<-c("cut","dig","gd","hem","oth")
+nams<-c("Cutaneous","Digestive","General disorder","Hematologic","Others")
+for(k in 1:dim(obsProbs)[3]){
+	i<-2
+	dat<-data.frame(Toxicity=nams[k],Grade="Grade >= 1",Cycle=1:6,Median=apply(expProbs[,i,,k],1,median),
+		pQmin=apply(expProbs[,i,,k],1,function(x) quantile(x,probs=0.025,na.rm=T)),
+		pQmax=apply(expProbs[,i,,k],1,function(x) quantile(x,probs=0.975,na.rm=T)))
+	obs<-data.frame(Toxicity=nams[k],Grade="Grade >= 1",Cycle=1:6,Observed=obsProbs[,i,k])
+	for(i in 3:dim(obsProbs)[2]){
+		dat<-rbind(dat,data.frame(Toxicity=nams[k],Grade=paste0("Grade >= ",i-1),Cycle=1:6,
+			Median=apply(expProbs[,i,,k],1,median),
+			pQmin=apply(expProbs[,i,,k],1,function(x) quantile(x,probs=0.025,na.rm=T)),
+			pQmax=apply(expProbs[,i,,k],1,function(x) quantile(x,probs=0.975,na.rm=T))))
+		obs<-rbind(obs,data.frame(Toxicity=nams[k],Grade=paste0("Grade >= ",i-1),Cycle=1:6,Observed=obsProbs[,i,k]))
+	}
+	assign(files[k],{
+		ggplot(dat, aes(y=Median,x=Cycle,colour=Grade))+
+		geom_point(data=obs,mapping=aes(x=Cycle,y=Observed,colour=Grade),size=2.5,shape=21,fill="white",show.legend = FALSE)+
+		geom_errorbar(aes(ymin=pQmin, ymax=pQmax), width=.1)+
+		geom_point() +ylim(0, 0.75) + ylab("Probability") + xlab("Cycle") + ggtitle(paste0(nams[k]," toxicities"))
+	})
+}
+legend<-get_legend(cut)
+for(f in files){assign(f,get(f)+theme(legend.position="none"))}
+grid.arrange(cut,dig,gd,hem,oth,legend,ncol=3,nrow=2)
+
+```
+
+### WAIC
+
+WAIC $=$ `r WAIC(fitCR)$waic`
+
+
+
+
+## Proportional odds model
+
+### Parameter estimates
+
+```{r}
+b0<-summary(fit0)$summary[grep("betaFx",rownames(summary(fit0)$summary)),colnames(summary(fit0)$summary)%in%c("mean","2.5%","97.5%")]
+b0<-cbind(b0,I(b0[,2]<=0 & b0[,3]>=0))
+rez<-cbind(sort(apply(expand.grid(c("Cutaneous","Digestive","General","Hemato","Other"),c("a1","a2","a3","Dose1","Time1"),stringsAsFactors=F),1,function(x) paste(x,collapse="_"))),prezRez(b0),b0[,4])
+rez[,3]<-c("*","")[1*I(as.numeric(b0[,2])<=0 & as.numeric(b0[,3])>=0)+1]
+colnames(rez)<-c("parameter","value","signif")
+rez2<-as.data.frame(rez[grep("Cutaneous",rez[,1]),-ncol(rez)],stringsAsFactors=F)
+colnames(rez2)<-c("parameter","Cutaneous")
+for(i in c("Digestive","General","Hemato","Other")){
+	rez2<-within(rez2,assign(i,rez[grep(i,rez[,1]),2]))
+}
+rez2$parameter<-c("Intercept$_{\\textnormal{Grade}\\geq 1}$","Intercept$_{\\textnormal{Grade}\\geq 2}$","Intercept$_{\\textnormal{Grade}\\geq 3}$","Dose","Cycle")
+print(xtable(rez2,align=c("l","l","r","r","r","r","r")),include.rownames=F,sanitize.text.function=force)
+
+```
+
+### Random effect correlation matrix
+
+```{r}
+tmp<-summary(fit0)$summary[grep("Omega",rownames(summary(fit0)$summary)),]
+tmp<-paste0(sprintf("%.2f",tmp[,1])," [",sprintf("%.2f",tmp[,4]),"; ",sprintf("%.2f",tmp[,8]),"]")
+b<-matrix(tmp,5,5)
+rownames(b)<-colnames(b)<-c("Cutaneous","Digestive","General disorder","Hematologic","Others")
+diag(b)<-1
+b[upper.tri(b)]<-""
+kable(b,format="latex",align=c("l","r","r","r","r","r"))
+
+```
+
+
+### Posterior predictive distribution
+
+Observed (empty circle) vs expected probability of each type of toxicity at each cycle according to the PO model. The median expected probability (filled circles) and the 95% prediction interval were obtained from 1,000 simulations from the posterior predictive distribution of the model.
+
+
+```{r}
+tmp<-predDist(fitPO)
+files<-c("cut","dig","gd","hem","oth")
+nams<-c("Cutaneous","Digestive","General disorder","Hematologic","Others")
+for(k in 1:dim(obsProbs)[3]){
+	i<-2
+	dat<-data.frame(Toxicity=nams[k],Grade="Grade >= 1",Cycle=1:6,Median=apply(expProbs[,i,,k],1,median),
+		pQmin=apply(expProbs[,i,,k],1,function(x) quantile(x,probs=0.025)),
+		pQmax=apply(expProbs[,i,,k],1,function(x) quantile(x,probs=0.975)))
+	obs<-data.frame(Toxicity=nams[k],Grade="Grade >= 1",Cycle=1:6,Observed=obsProbs[,i,k])
+	for(i in 3:dim(obsProbs)[2]){
+		dat<-rbind(dat,data.frame(Toxicity=nams[k],Grade=paste0("Grade >= ",i-1),Cycle=1:6,
+			Median=apply(expProbs[,i,,k],1,median),
+			pQmin=apply(expProbs[,i,,k],1,function(x) quantile(x,probs=0.025)),
+			pQmax=apply(expProbs[,i,,k],1,function(x) quantile(x,probs=0.975))))
+		obs<-rbind(obs,data.frame(Toxicity=nams[k],Grade=paste0("Grade >= ",i-1),Cycle=1:6,Observed=obsProbs[,i,k]))
+	}
+	assign(files[k],{
+		ggplot(dat, aes(y=Median,x=Cycle,colour=Grade))+
+		geom_point(data=obs,mapping=aes(x=Cycle,y=Observed,colour=Grade),size=2.5,shape=21,fill="white",show.legend = FALSE)+
+		geom_errorbar(aes(ymin=pQmin, ymax=pQmax), width=.1)+
+		geom_point() +ylim(0, 0.75) + ylab("Probability") + xlab("Cycle") + ggtitle(paste0(nams[k]," toxicities"))
+	})
+}
+legend<-get_legend(cut)
+for(f in files){assign(f,get(f)+theme(legend.position="none"))}
+grid.arrange(cut,dig,gd,hem,oth,legend,ncol=3,nrow=2)
+
+```
+
+
+
+### WAIC
+
+WAIC $=$ `r WAIC(fitPO)$waic`
+
