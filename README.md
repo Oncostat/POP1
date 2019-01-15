@@ -1,4 +1,4 @@
-# R and Stan codes for mixed effect continuation ratio model
+# R and Stan codes for mixed effect multivariate continuation ratio model
 
 These codes are the online material for the article:
 
