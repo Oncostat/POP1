@@ -9,15 +9,6 @@ source("src/writeStanCRModel.R")
 load("results/saveInits.RData")
 
 
-#insert the names of the columns of the grade of the 5 types of toxicity
-nams<-c("gradeC","gradeD","gradeH","gradeG","gradeO") #for c("Cutaneous","Digestive","General disorder","Hematologic","Others")
-#Name of the columns of the individual indices
-patId<-"patId" #labels should be standardized with values from 1 to the number of patient
-#Name of the columns of the dose
-dose<-"doseStd"
-#Name of the columns of the cycle
-cycle<-"cycle"
-
 
 
 #get posterior values of the univariate models as initial values for the multivariate model
@@ -58,7 +49,7 @@ stan_PO_data$Zero<-rep(0,length(grep("grade",colnames(data))))
 
 
 #Write code
-code<-writeStanCRModel(Y="Y",nY=ncol(stan_PO_data$Y),nlvlY=rep(4,ncol(stan_PO_data$Y)),X=c("X","T"),lvlSlpX=list(1,1,1,1,1),lvlSlpT=list(1,1,1,1,1),sub=FALSE)
+code<-writeStanCRModel(Y="Y",nY=ncol(stan_PO_data$Y),nlvlY=rep(4,ncol(stan_PO_data$Y)),X="X",T="T",lvlSlpX=list(1,1,1,1,1),lvlSlpT=list(1,1,1,1,1),sub=FALSE)
 outFile<-file("stanCodes/POModel.stan")
 writeLines(code$stanFile, outFile,sep="")
 close(outFile)

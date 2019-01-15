@@ -1,11 +1,8 @@
-writeStanCRModel<-function(Y,nY,nlvlY,X,lvlSlpX=c(),lvlSlpT=c(),rdmInt=TRUE,sub=FALSE,priors="HS"){
+writeStanCRModel<-function(Y,nY,nlvlY,X,T=NULL,lvlSlpX=c(),lvlSlpT=c(),sub=FALSE,FEpriors=c("HS","Cauchy")){
+	match.arg(FEpriors)
 	if(nY!=length(nlvlY)) stop("The number of level for each Y should be provided")
 	if(nY!=length(lvlSlpX)) stop("The number of X slope parameters for each Y should be provided")
-	if(length(X)==2){
-		T<-X[2]
-		X<-X[1]
-		if(nY!=length(lvlSlpT)) stop("The number of T slope parameters for each Y should be provided")
-	}
+	if(!is.null(T)) if(nY!=length(lvlSlpT)) stop("The number of T slope parameters for each Y should be provided")
 
 	####################### 
 	#define coef if not provided
@@ -17,12 +14,19 @@ writeStanCRModel<-function(Y,nY,nlvlY,X,lvlSlpX=c(),lvlSlpT=c(),rdmInt=TRUE,sub=
 		}
 		warnings("Without levels provided for the effects of X (lvlSlpX), the same effect was assigned to all levels (proportional odds assumption)")
 	}
-	if(!length(lvlSlpT)){
+	if(!is.null(T)){
+		if(!length(lvlSlpT)){
+			lvlSlpT<-list()
+			for(i in 1:nY){
+				lvlSlpT<-c(lvlSlpT,list(1:maxCateg[i]))
+			}
+			warnings("Without levels provided for the effects of T (lvlSlpT), the same effect was assigned to all levels (proportional odds assumption)")
+		}
+	}else{
 		lvlSlpT<-list()
 		for(i in 1:nY){
-			lvlSlpT<-c(lvlSlpT,list(1:maxCateg[i]))
+			lvlSlpT<-c(lvlSlpT,list(rep(0,maxCateg[i])))
 		}
-		warnings("Without levels provided for the effects of T (lvlSlpT), the same effect was assigned to all levels (proportional odds assumption)")
 	}
 
 
@@ -98,7 +102,7 @@ writeStanCRModel<-function(Y,nY,nlvlY,X,lvlSlpX=c(),lvlSlpT=c(),rdmInt=TRUE,sub=
 	####################### 
 	#Begin to write
 	func<-paste0("functions{",
-		"\n\treal crm_lpdf(matrix Y,",paste("vector",c("X",unlist(ifelse(exists("T"),"T",list(NULL))),"betaFx"),collapse=","),", int N, int J,int P,matrix rdmInt){",
+		"\n\treal crm_lpdf(matrix Y,",paste("vector",c("X",unlist(ifelse(is.null(T),list(NULL),"T")),"betaFx"),collapse=","),", int N, int J,int P,matrix rdmInt){",
 			paste0("\n\t\treal eta",1:max(unlist(maxCateg)),";",collapse=""),
 			paste0("\n\t\treal p",0:max(unlist(maxCateg)),";",collapse=""),
 			"\n\t\treal out;",
@@ -142,7 +146,7 @@ writeStanCRModel<-function(Y,nY,nlvlY,X,lvlSlpX=c(),lvlSlpT=c(),rdmInt=TRUE,sub=
 			"\n\t\tout=sum(prob);",
 			"\n\t\treturn(out);",
 			"\n\t}\n",
-			"\n\tvector vecLik(matrix Y,",paste("vector",c("X",unlist(ifelse(exists("T"),"T",list(NULL))),"betaFx"),collapse=","),", int N, int J,int P,matrix rdmInt){",
+			"\n\tvector vecLik(matrix Y,",paste("vector",c("X",unlist(ifelse(is.null(T),list(NULL),"T")),"betaFx"),collapse=","),", int N, int J,int P,matrix rdmInt){",
 				paste0("\n\t\treal eta",1:max(unlist(maxCateg)),";",collapse=""),
 				paste0("\n\t\treal p",0:max(unlist(maxCateg)),";",collapse=""),
 				"\n\t\treal out;",
@@ -194,14 +198,14 @@ writeStanCRModel<-function(Y,nY,nlvlY,X,lvlSlpX=c(),lvlSlpT=c(),rdmInt=TRUE,sub=
 					"\n\tint<lower=0> P;",
 					"\n\tmatrix[N,J] Y;",
 					"\n\tvector[N] X;",
-					"\n\tvector[N] T;",
+					ifelse(is.null(T),"","\n\tvector[N] T;"),
 					ifelse(sub,"","\n\tvector[J] Zero;"),
 					"\n\tint<lower=0> nRdmLabs;\n\tint rdmLabs[N];",
 					"\n}\n\n")
 
 	params<-paste0("parameters {",
 		"\n\tvector[P] z;",
-		ifelse(priors=="HS",paste0(
+		ifelse(FEpriors=="HS",paste0(
 			"\n\treal<lower=0> r1_global;",
 			"\n\treal<lower=0> r2_global;",
 			"\n\tvector<lower=0>[P] r1_local;",
@@ -214,7 +218,7 @@ writeStanCRModel<-function(Y,nY,nlvlY,X,lvlSlpX=c(),lvlSlpT=c(),rdmInt=TRUE,sub=
 
 	transParams<-paste0("transformed parameters{",
 		"\n\tmatrix[N,J] rdmIntId;",
-		ifelse(priors=="HS",paste0(
+		ifelse(FEpriors=="HS",paste0(
 			"\n\tvector[P] betaFx;",
 			"\n\treal<lower=0> tau;",
 			"\n\tvector<lower=0>[P] lambda;",
@@ -227,22 +231,22 @@ writeStanCRModel<-function(Y,nY,nlvlY,X,lvlSlpX=c(),lvlSlpT=c(),rdmInt=TRUE,sub=
 
 	model<-paste0("model {",
 		"\n\tz~normal(0,1);",
-		ifelse(priors=="HS",
+		ifelse(FEpriors=="HS",
 			paste0("\n\tr1_local~normal(0,1);",
 				"\n\tr2_local~inv_gamma(0.5,0.5);",
 				"\n\tr1_global~normal (0,1);",
 				"\n\tr2_global~inv_gamma(0.5,0.5);"),
-			"\n\tfor(i in 1:P){betaFx[i] ~ student_t(7,0,2.5);}"),
+			"\n\tfor(i in 1:P){betaFx[i] ~ cauchy(0,2.5);}"),
 		ifelse(sub,"\n\tsigma_rdmInt ~ cauchy(0, 5);\n\tfor(j in 1:nRdmLabs){\n\t\trdmInt[j] ~ normal(0,sigma_rdmInt);\n\t}",
 			"\n\tsigma_rdmInt ~ cauchy(0, 5);\n\tLcorr ~ lkj_corr_cholesky(1);\n\tfor(j in 1:nRdmLabs){rdmInt[j,] ~ multi_normal_cholesky(Zero, diag_pre_multiply(sigma_rdmInt, Lcorr));}"),
-		"\n\ttarget+=crm_lpdf(Y|X,T,betaFx,N,J,P,rdmIntId);",
+		ifelse(is.null(T),"\n\ttarget+=crm_lpdf(Y|X,betaFx,N,J,P,rdmIntId);","\n\ttarget+=crm_lpdf(Y|X,T,betaFx,N,J,P,rdmIntId);"),
 		"\n}\n\n")
 
 	genQ<-paste0("generated quantities {",
 		"\n\tvector[N] ll;",
 		"\n\tmatrix[J,J] Omega;",
 		"\n\tmatrix[J,J] Sigma;",
-		"\n\tll=vecLik(Y,X,T,betaFx,N,J,P,rdmIntId);",
+		ifelse(is.null(T),"\n\tll=vecLik(Y,X,betaFx,N,J,P,rdmIntId);","\n\tll=vecLik(Y,X,T,betaFx,N,J,P,rdmIntId);"),
 		"\n\tOmega = multiply_lower_tri_self_transpose(Lcorr);",
 		"\n\tSigma = quad_form_diag(Omega, sigma_rdmInt); ",
 		"\n}\n\n")

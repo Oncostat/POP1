@@ -1,14 +1,24 @@
 ##################################################################################################################################
 ##################################################################################################################################
-#
-##################################################################################################################################
-##################################################################################################################################
-
-
-
-
 
 #load your data here
+data<-#read.csv() / read.delim() / read_excel() (require package readxl)
+
+#Name of the columns of the individual indices
+patId<-"patId" #labels should be standardized with values from 1 to the number of patient
+#Name of the columns of the dose
+dose<-"doseStd"
+#Name of the columns of the cycle
+cycle<-"cycle"
+#insert the names of the columns of the grade of the 5 types of toxicity
+nams<-c("cutaneous","digestive","genDisorder","hemato","other") #for c("Cutaneous","Digestive","General disorder","Hematologic","Others")
+
+
+##################################################################################################################################
+##################################################################################################################################
+
+
+
 
 library(parallel)
 library(rstan)
@@ -17,14 +27,6 @@ options(mc.cores = 4)
 source("src/stanDMfcts.R")
 source("src/writeStanCRModel.R")
 
-#insert the names of the columns of the grade of the 5 types of toxicity
-nams<-c("gradeC","gradeD","gradeH","gradeG","gradeO") #for c("Cutaneous","Digestive","General disorder","Hematologic","Others")
-#Name of the columns of the individual indices
-patId<-"patId" #labels should be standardized with values from 1 to the number of patient
-#Name of the columns of the dose
-dose<-"doseStd"
-#Name of the columns of the cycle
-cycle<-"cycle"
 
 
 
@@ -36,7 +38,7 @@ fm4<-clm(as.factor(data[,nams[4]])~1,nominal=~data[,dose]+data[,cycle])
 fm5<-clm(as.factor(data[,nams[5]])~1,nominal=~data[,dose]+data[,cycle])
 
 #Write Stan code for univariate model
-code<-writeStanCRModel(Y="Y",nY=1,nlvlY=4,X=c("X","T"),lvlSlpX=list(1:3),lvlSlpT=list(1:3),sub=TRUE)
+code<-writeStanCRModel(Y="Y",nY=1,nlvlY=4,X="X",T="T",lvlSlpX=list(1:3),lvlSlpT=list(1:3),sub=TRUE)
 outFile<-file("stanCodes/subModel.stan")
 writeLines(code$stanFile,outFile,sep="")
 close(outFile)
